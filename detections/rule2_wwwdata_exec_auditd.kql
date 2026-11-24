@@ -1,0 +1,26 @@
+// Rule 2: command run by the web server account (auditd)
+// ---------------------------------------------------------------------------
+// Finding:        The attacker ran commands through the web shell as the web
+//                 server account (uid 33) in all three visits, and a cron job
+//                 ran the implant every 5 minutes. Sysmon recorded nothing
+//                 from the first visit; auditd had all of it.
+// Data source:    auditd SYSCALL (execve, syscall 59) joined to EXECVE records
+//                 on AuditSerial and OriginalTime (HartwellAudit_CL),
+//                 Microsoft Sentinel.
+// Time column:    OriginalTime (TimeGenerated is ingestion time in this data).
+// Hunt window:    2026-10-23 04:00 to 16:00 UTC.
+// Result:         496 records covering all three visits, including the first
+//                 visit. 116 of the records are cron runs of the implant.
+// What it missed: Actions taken inside PHP that start no process.
+// Expected false positives: PHP features or plugins that shell out (image
+//                 processing, mail). Allow-list those commands by name.
+// ---------------------------------------------------------------------------
+let execs = HartwellAudit_CL
+| where OriginalTime between (datetime(2026-10-23T04:00:00Z) .. datetime(2026-10-23T16:00:00Z))
+| where AuditType == "SYSCALL" and RawLine contains "syscall=59" and RawLine contains " uid=33 "
+| project AuditSerial, OriginalTime;
+HartwellAudit_CL
+| where AuditType == "EXECVE"
+| join kind=inner execs on AuditSerial, OriginalTime
+| project OriginalTime, AuditSerial, RawLine
+| order by OriginalTime asc

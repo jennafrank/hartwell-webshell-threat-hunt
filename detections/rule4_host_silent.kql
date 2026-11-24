@@ -1,0 +1,24 @@
+// Rule 4: host goes silent
+// ---------------------------------------------------------------------------
+// Finding:        Every log source went quiet from 12:27 to 13:43 UTC. Audit
+//                 serial numbers and process IDs reset when logging returned,
+//                 which points to a host restart, not a stopped forwarder.
+//                 Nothing alerted on the loss of collection.
+// Data source:    Sysmon for Linux, auditd and Apache access log
+//                 (HartwellSysmon_CL, HartwellAudit_CL, HartwellApache_CL),
+//                 Microsoft Sentinel, counted in 5-minute bins.
+// Time column:    OriginalTime (TimeGenerated is ingestion time in this data).
+// Hunt window:    2026-10-23 04:00 to 16:00 UTC.
+// Result:         15 silent 5-minute bins. 14 of them, from 12:30 to 13:35,
+//                 are the restart. One bin at 04:25 is unexplained.
+// What it missed: The cause. The rule fires on the silence, not on why it
+//                 happened. The counters on either side of the gap are what
+//                 show it was a restart.
+// Expected false positives: Planned maintenance and patch reboots. Suppress
+//                 during change windows.
+// ---------------------------------------------------------------------------
+union HartwellSysmon_CL, HartwellAudit_CL, HartwellApache_CL
+| make-series Events=count() default=0 on OriginalTime from datetime(2026-10-23T04:00:00Z) to datetime(2026-10-23T16:00:00Z) step 5m
+| mv-expand OriginalTime to typeof(datetime), Events to typeof(long)
+| where Events == 0
+| summarize SilentBins=count(), First=min(OriginalTime), Last=max(OriginalTime)

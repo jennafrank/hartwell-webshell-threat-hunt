@@ -1,0 +1,21 @@
+// Rule 3: shell started by Apache (Sysmon for Linux)
+// ---------------------------------------------------------------------------
+// Finding:        Commands sent to the web shell started a shell whose parent
+//                 process was Apache.
+// Data source:    Sysmon for Linux ProcessCreate events (HartwellSysmon_CL),
+//                 Microsoft Sentinel.
+// Time column:    OriginalTime (TimeGenerated is ingestion time in this data).
+// Hunt window:    2026-10-23 04:00 to 16:00 UTC.
+// Result:         62 hits for the web server account and 1 for root.
+// What it missed: The first visit, because Sysmon only starts recording at
+//                 05:24. The cron runs, because their parent is cron, not
+//                 Apache. Rule 2 covers both.
+// Expected false positives: The same as rule 2 (PHP features or plugins that
+//                 shell out, such as image processing and mail; allow-list
+//                 those commands by name).
+// ---------------------------------------------------------------------------
+HartwellSysmon_CL
+| where OriginalTime between (datetime(2026-10-23T04:00:00Z) .. datetime(2026-10-23T16:00:00Z))
+| where RuleName == "ProcessCreate" and ParentImage == "/usr/sbin/apache2"
+| where Image in ("/usr/bin/dash", "/bin/sh", "/usr/bin/bash", "/bin/bash")
+| summarize Hits=count(), First=min(OriginalTime), Last=max(OriginalTime) by User

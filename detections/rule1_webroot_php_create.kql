@@ -1,0 +1,25 @@
+// Rule 1: PHP file created in the web root by any account (auditd)
+// ---------------------------------------------------------------------------
+// Finding:        Both web shells were written by root: health-check.php at
+//                 04:34:31 (through an SSH session with sudo) and the shell
+//                 re-created in visit 3. The cookie backdoor was written into
+//                 wp-includes/version.php at 04:37:19.
+// Data source:    auditd PATH records (HartwellAudit_CL), Microsoft Sentinel.
+// Time column:    OriginalTime (TimeGenerated is ingestion time in this data).
+// Hunt window:    2026-10-23 04:00 to 16:00 UTC.
+// Result:         6 rows. Caught both web shell writes and the version.php
+//                 backdoor. Three root-created files about 24 minutes before
+//                 the scan are unexplained; they need checking against site
+//                 maintenance before being treated as false positives.
+// What it missed: It missed nothing it was built to catch.
+// Why any account: both shells were written by root, so a rule limited to the
+//                 web server account would have missed them.
+// Expected false positives: WordPress core, plugin and theme updates. Exclude
+//                 them by the deployment account or path once known.
+// ---------------------------------------------------------------------------
+HartwellAudit_CL
+| where OriginalTime between (datetime(2026-10-23T04:00:00Z) .. datetime(2026-10-23T16:00:00Z))
+| where AuditType == "PATH"
+| where RawLine contains "name=\"/var/www/html/" and RawLine contains ".php\"" and RawLine contains "nametype=CREATE"
+| project OriginalTime, AuditSerial, RawLine
+| order by OriginalTime asc
